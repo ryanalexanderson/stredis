@@ -102,9 +102,10 @@ def to_stdout(args):
 
 def stredis():
     parser = FullErrorParser(description="Treats Redis Streams like stdin or stdout. " +
-                                         "Use 'stredis *' to monitor all streams on the server.", add_help=False)
+                                         "e.g. Use 'stredis --all-streams' to monitor all streams on the server.",
+                                         add_help=False)
     parser.add_argument('--help', action='help', help='Show this help message and exit')
-    parser.add_argument('streams', nargs='+',
+    parser.add_argument('streams', nargs='?',
                         help='Streams to be followed (or a single stream to which stdin is funneled).')
     parser.add_argument(
         '--hostname', '-h', default=os.getenv("REDISHOST", "localhost"),
@@ -135,19 +136,26 @@ def stredis():
         '--file', '-f', default="-",
         help="Grabs input from a file rather than stdin.")
     parser.add_argument(
-        '--all', action='store_true',
+        '--all-messages', action='store_true',
+        help="Shows everything in the stream history.")
+    parser.add_argument(
+        '--all-streams', action='store_true',
         help="Shows everything in the stream history.")
     parser.add_argument(
         '--list', action='store_true',
         help="Lists all of the streams on the redis server and quits.")
 
     args = parser.parse_args()
-
     if args.list:
         all_streams = get_all_streams(r)
         for this_stream in all_streams:
             print(this_stream)
             exit(0)
+
+    elif not args.streams:
+        parser.print_help()
+        exit(-1)
+
     elif select.select([sys.stdin], [], [], 0.0)[0] or args.file != "-":
         from_stdin(args)
     else:
