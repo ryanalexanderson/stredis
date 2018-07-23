@@ -11,7 +11,6 @@ import datetime
 import signal
 
 
-signal.signal(signal.SIGINT, sigint_handler)
 redisHost = os.getenv("REDISHOST")
 redisPassword = os.getenv("REDISPASSWORD", None)
 r = localstreamredis.StrictRedis(redisHost, password=redisPassword)
@@ -31,6 +30,9 @@ def eprint(whatever):
 def sigint_handler(signum, frame):
     eprint("Exit")
     exit(0)
+
+
+signal.signal(signal.SIGINT, sigint_handler)
 
 
 def get_all_streams(redis_conn, keys=None):
