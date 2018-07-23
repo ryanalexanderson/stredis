@@ -8,6 +8,6 @@ setup(name='stredis',
       author_email='ryanalexanderson@yahoo.ca',
       license='MIT',
       packages=['stredis'],
-      install_requires=['redis',],
-      scripts=['stredis'],
+      install_requires=['redis'],
+      entry_points={'console_scripts': ['stredis=stredis:stredis']},
       zip_safe=False)

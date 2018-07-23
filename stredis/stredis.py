@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import print_function
 import select
 import os
 import argparse
@@ -11,8 +12,8 @@ import datetime
 redisHost = os.getenv("REDISHOST")
 redisPassword = os.getenv("REDISPASSWORD", None)
 
-def eprint(*args, **kwargs):
-    print(*args, file=sys.stderr, **kwargs)
+def eprint(whatever):
+    print(whatever, file=sys.stderr)
 
 r = localstreamredis.StrictRedis(redisHost,password=redisPassword)
 
@@ -74,11 +75,12 @@ def to_stdout(args):
         if msg is not None:
             for key, val in msg[2].items():
                 timestamp = datetime.datetime.fromtimestamp(int(msg[1][:13])/1000).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3] if args.timestamp else None
+                index = msg[1].decode() if isinstance(msg[1],bytes) else msg[1]
                 print(formatString.format(**dict(timestamp=timestamp,
                                                  streamname=msg[0],
-                                                 index=msg[1].decode() if isinstance(msg[1],bytes) else msg[1]),
+                                                 index=index,
                                                  keyout=key,
-                                                 value=val.decode() if isinstance(val,bytes) else val))
+                                                 value=val.decode() if isinstance(val,bytes) else val)))
 
        except Exception as e:
            print(e)
