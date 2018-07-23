@@ -17,6 +17,12 @@ def eprint(whatever):
 
 r = localstreamredis.StrictRedis(redisHost,password=redisPassword)
 
+class FullErrorParser(argparse.ArgumentParser):
+   def error(self, message):
+      sys.stderr.write('error: %s\n' % message)
+      self.print_help()
+      sys.exit(2)
+
 def getAllStreams(r, keys=None):
     keyList = r.keys() if keys is None else keys
     pipe = r.pipeline()
@@ -55,6 +61,7 @@ def from_stdin(args):
 
 def to_stdout(args):
     streamsToMonitor = getStreamsToMonitor(args)
+    startIndex = 0 if args.all else "$"
     currentStreamDict = dict([(x, "$") for x in streamsToMonitor])
     redis_stream = r.streams(currentStreamDict, stop_on_timeout=False, count=500)
     formatString = ""
@@ -85,8 +92,10 @@ def to_stdout(args):
        except Exception as e:
            print(e)
 
+
+
 def stredis():
-    parser = argparse.ArgumentParser(description="Treats Redis Streams like stdin or stdout.", add_help=False)
+    parser = FullErrorParser(description="Treats Redis Streams like stdin or stdout.", add_help=False)
     parser.add_argument('--help', action='help', help='Show this help message and exit')
     parser.add_argument('streams', nargs='+',
                         help='Streams to be followed (or a single stream to which stdin is funneled).')
@@ -100,9 +109,9 @@ def stredis():
         '--auth', '-a', default=os.getenv("REDISPASSWORD", None),
         help="Password of Redis Server (default: None).")
     parser.add_argument(
-        '--key', '-k', default="default", help="The key association with inbound data (default 'default', stdin only)")
+        '--key', '-k', default="default", help="The key association with inbound data (default 'default') (stdin only)")
     parser.add_argument(
-        '--maxlen', '-m', type=int, default=None, help="Maximum length of queue (default None, stdin only)")
+        '--maxlen', '-m', type=int, default=None, help="Maximum length of queue (default None) (stdin only)")
     parser.add_argument(
         '--showstream', '-s', action='store_true',
         help="Show the stream associated with an outbound message.")
@@ -117,7 +126,11 @@ def stredis():
         help="Show the key for an outbound message.")
     parser.add_argument(
         '--file', '-f', default="-",
-        help="Show the key for an outbound message.")
+        help="Grabs input from a file rather than stdin.")
+    parser.add_argument(
+        '--all', action='store_true',
+        help="Shows everything in the stream history too.")
+
 
     args = parser.parse_args()
 
