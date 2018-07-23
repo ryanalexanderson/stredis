@@ -36,6 +36,8 @@ def get_all_streams(redis_conn, keys=None):
 def get_streams_to_monitor(args):
     specific_streams = set()
     wildcard_streams = []
+    if args.all_streams:
+        wildcard_streams.append("*")
     for stream in args.streams:
         if "*" in stream or "?" in stream:
             wildcard_streams.append(stream)
@@ -152,7 +154,7 @@ def stredis():
             print(this_stream)
             exit(0)
 
-    elif not args.streams:
+    elif not args.streams and not args.all_streams:
         parser.print_help()
         exit(-1)
 
