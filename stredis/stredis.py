@@ -37,7 +37,7 @@ def get_streams_to_monitor(args):
     specific_streams = set()
     wildcard_streams = []
     if args.all_streams:
-        args.streams.append("*")
+        args.streams = ["*"]
     for stream in args.streams:
         if "*" in stream or "?" in stream:
             wildcard_streams.append(stream)
