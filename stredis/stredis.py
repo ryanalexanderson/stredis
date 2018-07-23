@@ -8,7 +8,10 @@ import localstreamredis
 import fileinput
 import sys
 import datetime
+import signal
 
+
+signal.signal(signal.SIGINT, sigint_handler)
 redisHost = os.getenv("REDISHOST")
 redisPassword = os.getenv("REDISPASSWORD", None)
 r = localstreamredis.StrictRedis(redisHost, password=redisPassword)
@@ -23,6 +26,11 @@ class FullErrorParser(argparse.ArgumentParser):
 
 def eprint(whatever):
     print(whatever, file=sys.stderr)
+
+
+def sigint_handler(signum, frame):
+    eprint("Exit")
+    exit(0)
 
 
 def get_all_streams(redis_conn, keys=None):
