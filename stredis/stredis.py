@@ -11,91 +11,98 @@ import datetime
 
 redisHost = os.getenv("REDISHOST")
 redisPassword = os.getenv("REDISPASSWORD", None)
+r = localstreamredis.StrictRedis(redisHost, password=redisPassword)
+
+
+class FullErrorParser(argparse.ArgumentParser):
+    def error(self, message):
+        sys.stderr.write('error: %s\n' % message)
+        self.print_help()
+        sys.exit(2)
+
 
 def eprint(whatever):
     print(whatever, file=sys.stderr)
 
-r = localstreamredis.StrictRedis(redisHost,password=redisPassword)
 
-class FullErrorParser(argparse.ArgumentParser):
-   def error(self, message):
-      sys.stderr.write('error: %s\n' % message)
-      self.print_help()
-      sys.exit(2)
+def get_all_streams(redis_conn, keys=None):
+    key_list = redis_conn.keys() if keys is None else keys
+    pipe = redis_conn.pipeline()
+    for key in key_list:
+        pipe.type(key)
+    return [x[0].decode() for x in zip(key_list, pipe.execute()) if x[1] == b'stream']
 
-def getAllStreams(r, keys=None):
-    keyList = r.keys() if keys is None else keys
-    pipe = r.pipeline()
-    for key in keyList: pipe.type(key)
-    return [x[0].decode() for x in zip(keyList,pipe.execute()) if x[1]==b'stream']
 
-def getStreamsToMonitor(args):
-    specificStreams = set()
-    wildcardStreams = []
+def get_streams_to_monitor(args):
+    specific_streams = set()
+    wildcard_streams = []
     for stream in args.streams:
         if "*" in stream or "?" in stream:
-            wildcardStreams.append(stream)
+            wildcard_streams.append(stream)
         else:
-            specificStreams.add(stream)
-    if len(wildcardStreams):
-        allStreams = getAllStreams(r)
-        for thisWildCard in wildcardStreams:
-            for thisStream in allStreams:
-                if fnmatch.fnmatch(thisStream, thisWildCard):
-                    specificStreams.add(thisStream)
-    if not len(specificStreams):
+            specific_streams.add(stream)
+    if len(wildcard_streams):
+        all_streams = get_all_streams(r)
+        for thisWildCard in wildcard_streams:
+            for this_stream in all_streams:
+                if fnmatch.fnmatch(this_stream, thisWildCard):
+                    specific_streams.add(this_stream)
+    if not len(specific_streams):
         raise Exception("No Streams found to monitor.")
     eprint("Monitoring following streams:")
-    for thisSpecificStream in specificStreams:
+    for thisSpecificStream in specific_streams:
         eprint(thisSpecificStream)
-    return list(specificStreams)
+    return list(specific_streams)
+
 
 def from_stdin(args):
     if len(args.streams) > 1 or "*" in args.streams[0] or "?" in args.streams[0]:
         raise Exception("When processing stdin, only one stream argument (without wildcards) is required.")
-    targetStream = args.streams[0]
-    targetKey = args.key
+    target_stream = args.streams[0]
+    target_key = args.key
     for line in fileinput.input(args.file):
-        r.xadd(targetStream, maxlen=args.maxlen, **dict({targetKey: line.rstrip()}))
+        r.xadd(target_stream, maxlen=args.maxlen, **dict({target_key: line.rstrip()}))
     pass
 
-def to_stdout(args):
-    streamsToMonitor = getStreamsToMonitor(args)
-    startIndex = 0 if args.all else "$"
-    currentStreamDict = dict([(x, "$") for x in streamsToMonitor])
-    redis_stream = r.streams(currentStreamDict, stop_on_timeout=False, count=500)
-    formatString = ""
-    if args.timestamp:
-        formatString = formatString + "{timestamp}: "
-    if args.showstream:
-        max_stream_name_len = max([len(y) for y in streamsToMonitor])
-        formatString = formatString + "{{streamname:{maxlen}.{maxlen}}}: ".format(maxlen=max_stream_name_len)
-    if args.index:
-        formatString = formatString + "{index}: "
-    if args.keyout:
-        formatString = formatString + "{keyout}: "
 
-    formatString = formatString + "{value}"
+def to_stdout(args):
+    streams_to_monitor = get_streams_to_monitor(args)
+    start_index = 0 if args.all else "$"
+    current_stream_dict = dict([(x, start_index) for x in streams_to_monitor])
+    redis_stream = r.streams(current_stream_dict, stop_on_timeout=False, count=500)
+    format_string = ""
+    if args.timestamp:
+        format_string = format_string + "{timestamp}: "
+    if args.showstream:
+        max_stream_name_len = max([len(y) for y in streams_to_monitor])
+        format_string = format_string + "{{streamname:{maxlen}.{maxlen}}}: ".format(maxlen=max_stream_name_len)
+    if args.index:
+        format_string = format_string + "{index}: "
+    if args.keyout:
+        format_string = format_string + "{keyout}: "
+
+    format_string = format_string + "{value}"
 
     for msg in redis_stream:
-       try:
-        if msg is not None:
-            for key, val in msg[2].items():
-                timestamp = datetime.datetime.fromtimestamp(int(msg[1][:13])/1000).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3] if args.timestamp else None
-                index = msg[1].decode() if isinstance(msg[1],bytes) else msg[1]
-                print(formatString.format(**dict(timestamp=timestamp,
-                                                 streamname=msg[0],
-                                                 index=index,
-                                                 keyout=key,
-                                                 value=val.decode() if isinstance(val,bytes) else val)))
+        try:
+            if msg is not None:
+                for key, val in msg[2].items():
+                    timestamp = datetime.datetime.fromtimestamp(int(msg[1][:13])/1000)\
+                        .strftime('%Y-%m-%d %H:%M:%S.%f')[:-3] if args.timestamp else None
+                    index = msg[1].decode() if isinstance(msg[1], bytes) else msg[1]
+                    print(format_string.format(**dict(timestamp=timestamp,
+                                                      streamname=msg[0],
+                                                      index=index,
+                                                      keyout=key,
+                                                      value=val.decode() if isinstance(val, bytes) else val)))
 
-       except Exception as e:
-           print(e)
-
+        except Exception as e:
+            print(e)
 
 
 def stredis():
-    parser = FullErrorParser(description="Treats Redis Streams like stdin or stdout.", add_help=False)
+    parser = FullErrorParser(description="Treats Redis Streams like stdin or stdout. " +
+                                         "Use 'stredis *' to monitor all streams on the server.", add_help=False)
     parser.add_argument('--help', action='help', help='Show this help message and exit')
     parser.add_argument('streams', nargs='+',
                         help='Streams to be followed (or a single stream to which stdin is funneled).')
@@ -129,15 +136,23 @@ def stredis():
         help="Grabs input from a file rather than stdin.")
     parser.add_argument(
         '--all', action='store_true',
-        help="Shows everything in the stream history too.")
-
+        help="Shows everything in the stream history.")
+    parser.add_argument(
+        '--list', action='store_true',
+        help="Lists all of the streams on the redis server and quits.")
 
     args = parser.parse_args()
 
-    if select.select([sys.stdin,],[],[],0.0)[0] or args.file != "-":
+    if args.list:
+        all_streams = get_all_streams(r)
+        for this_stream in all_streams:
+            print(this_stream)
+            exit(0)
+    elif select.select([sys.stdin], [], [], 0.0)[0] or args.file != "-":
         from_stdin(args)
     else:
         to_stdout(args)
 
-if __name__== "__main__":
+
+if __name__ == "__main__":
     stredis()
