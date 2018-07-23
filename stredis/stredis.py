@@ -69,7 +69,7 @@ def from_stdin(args):
 
 def to_stdout(args):
     streams_to_monitor = get_streams_to_monitor(args)
-    start_index = 0 if args.all else "$"
+    start_index = 0 if args.all_messages else "$"
     current_stream_dict = dict([(x, start_index) for x in streams_to_monitor])
     redis_stream = r.streams(current_stream_dict, stop_on_timeout=False, count=500)
     format_string = ""

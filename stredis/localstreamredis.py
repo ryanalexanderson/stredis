@@ -2563,13 +2563,15 @@ class Streams(object):
         lowest_index = 9999
         lowest_stream = None
         for stream_name, record_list in self.buffer_dict.items():
-            if len(record_list):
-                if stream_name in self.topic_hit_limit and len(record_list) == 0:
-                    temp_dict = self.connection.xread(self.count, 0,
-                                                      **{stream_name: self.streams[stream_name]})
-                    self.buffer_dict[stream_name] = temp_dict[stream_name]
-                    self.update_last_and_limit()
+            if stream_name in self.topic_hit_limit and len(record_list) == 0:
+                temp_dict = self.connection.xread(self.count, 1,
+                                                  **{stream_name: self.streams[stream_name]})
+                if len(temp_dict)<self.count:
+                    self.topic_hit_limit.remove(stream_name)
+                self.buffer_dict[stream_name] = temp_dict[stream_name]
+                self.update_last_and_limit()
 
+            if len(record_list):
                 if record_list[0][0][0:13] < lowest_timestamp_str:
                     lowest_timestamp_str = record_list[0][0][0:13]
                     lowest_index = int(record_list[0][0][14:])
