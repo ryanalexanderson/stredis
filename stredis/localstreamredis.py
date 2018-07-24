@@ -2562,8 +2562,9 @@ class Streams(object):
         lowest_timestamp_str = self.BIG_NUMBER
         lowest_index = 9999
         lowest_stream = None
-        for stream_name, record_list in self.buffer_dict.items():
-            if stream_name in self.topic_hit_limit and len(record_list) == 0:
+        for stream_name in self.topic_hit_limit:
+            record_list = self.buffer_dict[stream_name]
+            if len(record_list) == 0:
                 temp_dict = self.connection.xread(self.count, 1,
                                                   **{stream_name: self.streams[stream_name]})
                 if len(temp_dict[stream_name]) < self.count:
