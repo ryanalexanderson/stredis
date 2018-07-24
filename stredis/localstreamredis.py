@@ -2511,12 +2511,12 @@ class Streams(object):
         self.timeout_response = timeout_response
         self.sanitize_stream_starts()
         self.buffer_dict = self.connection.xread(self.count, None, **self.streams)
+        self.topic_hit_limit = set()
+        self.remove_from_limit = list()
         self.update_last_and_limit()
         self.stop_on_timeout = stop_on_timeout if block else True
         self.raise_connection_exceptions = raise_connection_exceptions
         self.connectionError = False
-        self.topic_hit_limit = set()
-        self.remove_from_limit = list()
 
     def update_last_and_limit(self):
         if self.buffer_dict is not None:
@@ -2524,6 +2524,8 @@ class Streams(object):
                 if len(record_list):  # always yes?
                     self.streams[stream_name] = record_list[-1][0]
                 if len(record_list) == self.count:
+                    if stream_name == 'vibco-vibco-okuma9-sig.S1load':
+                        ryan = 1
                     self.topic_hit_limit.add(stream_name)
 
     def sanitize_stream_starts(self):
@@ -2569,6 +2571,8 @@ class Streams(object):
                 temp_dict = self.connection.xread(self.count, 1,
                                                   **{stream_name: self.streams[stream_name]})
                 if len(temp_dict[stream_name]) < self.count:
+                    if stream_name == 'vibco-vibco-okuma9-sig.S1load':
+                        ryan = 1
                     self.remove_from_limit.append(stream_name)
                 self.buffer_dict[stream_name] = temp_dict[stream_name]
                 self.update_last_and_limit()
