@@ -11,9 +11,8 @@ import datetime
 import signal
 
 
-redisHost = os.getenv("REDISHOST")
-redisPassword = os.getenv("REDISPASSWORD", None)
-r = localstreamredis.StrictRedis(redisHost, password=redisPassword)
+def get_redis_instance(args):
+    return localstreamredis.StrictRedis(args.hostname, port=args.port, password=args.auth)
 
 
 class FullErrorParser(argparse.ArgumentParser):
@@ -43,7 +42,7 @@ def get_all_streams(redis_conn, keys=None):
     return [x[0].decode() for x in zip(key_list, pipe.execute()) if x[1] == b'stream']
 
 
-def get_streams_to_monitor(args):
+def get_streams_to_monitor(r, args):
     specific_streams = set()
     wildcard_streams = []
     if args.all_streams:
@@ -67,8 +66,8 @@ def get_streams_to_monitor(args):
     return list(specific_streams)
 
 
-def from_stdin(args):
-    if len(args.streams) > 1 or "*" in args.streams[0] or "?" in args.streams[0]:
+def from_stdin(r, args):
+    if len(args.streams) > 1 or "*" in args.streams[0] or "?" in args.streams[0]:  # Doesn't work without quotes
         raise Exception("When processing stdin, only one stream argument (without wildcards) is required.")
     target_stream = args.streams[0]
     target_key = args.key
@@ -77,8 +76,8 @@ def from_stdin(args):
     pass
 
 
-def to_stdout(args):
-    streams_to_monitor = get_streams_to_monitor(args)
+def to_stdout(r, args):
+    streams_to_monitor = get_streams_to_monitor(r, args)
     start_index = 0 if args.all_messages else "$"
     current_stream_dict = dict([(x, start_index) for x in streams_to_monitor])
     redis_stream = r.streams(current_stream_dict, stop_on_timeout=False, count=500)
@@ -113,11 +112,11 @@ def to_stdout(args):
 
 
 def stredis():
-    parser = FullErrorParser(description="Treats Redis Streams like stdin or stdout. " +
-                                         "e.g. Use 'stredis --all-streams' to monitor all streams on the server.",
-                                         add_help=False)
+    parser = FullErrorParser(add_help=False, description="""
+    Treats Redis Streams like stdin or stdout. e.g. Use 'stredis --all-streams' to monitor all streams on the server.
+    Wild cards may be used for streams, but they must be quoted (e.g. `stredis "*").""")
     parser.add_argument('--help', action='help', help='Show this help message and exit')
-    parser.add_argument('streams', nargs='?',
+    parser.add_argument('streams', nargs='*',
                         help='Streams to be followed (or a single stream to which stdin is funneled).')
     parser.add_argument(
         '--hostname', '-h', default=os.getenv("REDISHOST", "localhost"),
@@ -158,6 +157,8 @@ def stredis():
         help="Lists all of the streams on the redis server and quits.")
 
     args = parser.parse_args()
+    r = get_redis_instance(args)
+
     if args.list:
         all_streams = get_all_streams(r)
         for this_stream in all_streams:
@@ -169,9 +170,9 @@ def stredis():
         exit(-1)
 
     elif select.select([sys.stdin], [], [], 0.0)[0] or args.file != "-":
-        from_stdin(args)
+        from_stdin(r, args)
     else:
-        to_stdout(args)
+        to_stdout(r, args)
 
 
 if __name__ == "__main__":
